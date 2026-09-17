@@ -1,0 +1,28 @@
+order_id,customer_name,category,product,city,quantity,unit_price,order_date,status,sales,profit,discount
+,,,,,,,,,,,
+1001,Aarav,Electronics,Laptop,Kathmandu,2,85000,1/5/2026,Completed,170000,34000,17000
+1002,Sita,Furniture,Office Chair,Lalitpur,1,18000,1/8/2026,Completed,18000,3600,900
+1003,Rohan,Electronics,Headphones,Bhaktapur,3,4500,1/12/2026,Pending,13500,2700,675
+1004,Anisha,Clothing,Jacket,Kathmandu,2,6500,1/15/2026,Completed,13000,2600,650
+1005,Bibek,Electronics,Mobile Phone,Pokhara,1,55000,1/20/2026,Cancelled,55000,11000,5500
+1006,Pragya,Books,Python Book,,4,2200,1/22/2026,Completed,8800,1760,440
+1007,Nabin,Furniture,Desk,Lalitpur,2,25000,1/25/2026,Completed,50000,10000,5000
+1008,Samir,Clothing,Sneakers,Pokhara,3,7500,2/2/2026,Pending,22500,4500,1125
+1009,Puja,Electronics,Tablet,Kathmandu,1,,2/5/2026,Completed,,,
+1010,Kiran,Books,Data Science Book,Bhaktapur,2,3500,2/9/2026,Completed,7000,1400,350
+1011,Mina,Clothing,T-Shirt,Kathmandu,5,1800,2/12/2026,Completed,9000,1800,450
+1012,Suman,Furniture,Bookshelf,Pokhara,1,15000,2/15/2026,,15000,3000,750
+1013,Roshan,Electronics,Monitor,Lalitpur,2,28000,2/18/2026,Completed,56000,11200,5600
+1014,Kabita,Books,SQL Book,Kathmandu,3,2800,2/20/2026,Completed,8400,1680,420
+1015,,Clothing,Jeans,Bhaktapur,2,4200,2/23/2026,Cancelled,8400,1680,420
+1016,Alisha,Electronics,Keyboard,Pokhara,4,3500,3/1/2026,Completed,14000,2800,700
+1017,Manoj,Furniture,Table,Kathmandu,1,22000,3/5/2026,Completed,22000,4400,1100
+1018,Sneha,Clothing,Sweater,Lalitpur,2,5000,3/8/2026,Pending,10000,2000,500
+1019,Ashim,Books,Excel Book,Bhaktapur,,2500,3/11/2026,Completed,,,
+1020,Rita,Electronics,Smart Watch,Kathmandu,2,12000,3/15/2026,Completed,24000,4800,1200
+1001,Aarav,Electronics,Laptop,Kathmandu,2,85000,1/5/2026,Completed,170000,34000,17000
+1007,Nabin,Furniture,Desk,Lalitpur,2,25000,1/25/2026,Completed,50000,10000,5000
+1013,Roshan,Electronics,Monitor,Lalitpur,2,28000,2/18/2026,Completed,56000,11200,5600
+1024,Nisha,Electronics,Mouse,Kathmandu,2,85000,1/5/2026,Completed,,600,150
+1025,Bikash,Furniture,Lamp,Lalitpur,1,18000,1/8/2026,Completed,9000,,450
+1026,Sarita,Electronics,Shirt,Bhaktapur,3,4500,1/12/2026,Pending,5000,1000,
