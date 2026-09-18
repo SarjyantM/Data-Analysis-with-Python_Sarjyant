@@ -12,7 +12,6 @@ sales_rec.columns = sales_rec.columns.str.lower().str.replace(" ", "_")
 sales_rec = sales_rec.iloc[1:].reset_index(drop=True)
 
 # 4.Drop Columns
-# dropping 'product' since 'category' already covers what we need
 sales_rec =sales_rec.drop(columns=["product"])
 
 # 5.Count Missing Values
