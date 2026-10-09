@@ -1,154 +1,327 @@
+# End-to-End ETL & Data Analysis Pipeline
+# Dataset: Kaggle "Supermarket sales"
+
+import os
+
+import matplotlib.pyplot as plt
 import pandas as pd
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 
-df = pd.read_csv("online_retail.csv")
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-print("rows and columns:", df.shape)
-print()
-print("missing values:")
-print(df.isna().sum())
-print()
-print("duplicate rows:", df.duplicated().sum())
-print()
-print("date range:", df["InvoiceDate"].min(), "to", df["InvoiceDate"].max())
-print("unique invoices:", df["InvoiceNo"].nunique())
-print("unique products:", df["StockCode"].nunique())
-print("unique customers:", df["CustomerID"].nunique())
-print("countries:", df["Country"].nunique())
+# MySQL connection settings
+DB_USER     = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "root")  
+DB_HOST     = os.getenv("DB_HOST", "localhost")
+DB_PORT     = int(os.getenv("DB_PORT", "3306"))
+DB_NAME     = "supermarket_db"
 
-# drop exact duplicates
-before = len(df)
-df = df.drop_duplicates()
-print(f"\ndropped {before - len(df)} duplicate rows")
+# CSV file extract
+raw = pd.read_csv("SuperMarket Analysis.csv", encoding="utf-8-sig")
 
-# any invoice number starting with "C" is a cancelled order
-# checked earlier - every cancelled row already has a negative quantity
-df["invoice_no"] = df["InvoiceNo"].astype(str).str.strip()
-df["is_cancelled"] = df["invoice_no"].str.startswith("C")
-print("cancelled invoice rows:", df["is_cancelled"].sum())
+# EDA
+print(raw.shape)
+print(raw.columns.tolist())
+print(raw.dtypes)
+print(raw.head())
+print(raw.describe())
+print(raw.isnull().sum())
+print("duplicates:", raw.duplicated().sum())
+print(raw.nunique())
+print(raw["Product line"].value_counts())
+print(raw["Payment"].value_counts())
 
-# drop rows where we don't even know what product it was
-before = len(df)
-df = df[df["Description"].notna()]
-print(f"dropped {before - len(df)} rows with no product description")
+print("sales = cogs + tax:", ((raw["cogs"] + raw["Tax 5%"] - raw["Sales"]).abs() < 0.01).all())
+print("gross income same as tax:", (raw["gross income"] == raw["Tax 5%"]).all())
+print("cogs = price * qty:", ((raw["Unit price"] * raw["Quantity"] - raw["cogs"]).abs() < 0.01).all())
 
-# price of 0 or less isn't a real sale, just some kind of adjustment entry
-before = len(df)
-df = df[df["UnitPrice"] > 0]
-print(f"dropped {before - len(df)} rows with price <= 0")
+# Outlier check with the IQR rule
+for col in ["Unit price", "Quantity", "Sales", "Rating"]:
+    q1, q3 = raw[col].quantile([0.25, 0.75])
+    iqr = q3 - q1
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    print(f"outliers in {col}:", int(((raw[col] < lo) | (raw[col] > hi)).sum()))
 
-# negative quantity only makes sense for cancelled orders
-# if it's negative but not cancelled, that's just a bad row
-before = len(df)
-df = df[(df["Quantity"] > 0) | (df["is_cancelled"])]
-print(f"dropped {before - len(df)} rows with negative quantity on a non-cancelled order")
+# Check that categories are what we expect
+for col in ["Branch", "City", "Customer type", "Gender", "Product line", "Payment"]:
+    print(f"{col}:", sorted(raw[col].unique()))
 
-# clean up text columns
-df["Description"] = df["Description"].astype(str).str.strip()
-df["Country"] = df["Country"].astype(str).str.strip()
-df["StockCode"] = df["StockCode"].astype(str).str.strip().str.upper()
-
-# about a quarter of rows have no CustomerID (guest checkout basically)
-# instead of dropping all of that data, just give them id -1 for now
-missing_cust = df["CustomerID"].isna().sum()
-print(f"\nrows with no CustomerID (treated as guest): {missing_cust}")
-df["customer_id"] = df["CustomerID"].fillna(-1).astype(int)
-
-df["invoice_date"] = pd.to_datetime(df["InvoiceDate"])
-
-df = df.rename(columns={
-    "StockCode": "stock_code",
-    "Description": "description",
-    "Quantity": "quantity",
-    "UnitPrice": "unit_price",
-    "Country": "country",
+# Clean & Transform
+sales = raw.drop_duplicates()
+sales = sales.rename(columns={
+    "Invoice ID": "invoice_id", "Branch": "branch", "City": "city",
+    "Customer type": "customer_type", "Gender": "gender", "Product line": "product_line",
+    "Unit price": "unit_price", "Quantity": "quantity", "Tax 5%": "tax", "Sales": "sales_amount",
+    "Date": "date", "Time": "time", "Payment": "payment", "Rating": "rating",
 })
-df["line_total"] = df["quantity"] * df["unit_price"]
+sales = sales.drop(columns=["gross margin percentage", "gross income"])
 
-df = df[["invoice_no", "invoice_date", "is_cancelled", "customer_id",
-         "country", "stock_code", "description", "quantity",
-         "unit_price", "line_total"]]
+for col in ["branch", "city", "customer_type", "gender", "product_line", "payment"]:
+    sales[col] = sales[col].str.strip()
 
-print("\nshape after cleaning:", df.shape)
+sales["order_date"] = pd.to_datetime(sales["date"], format="%m/%d/%Y")
+sales["order_time"] = pd.to_datetime(sales["time"], format="%I:%M:%S %p").dt.strftime("%H:%M:%S")
+sales["order_month"] = sales["order_date"].dt.strftime("%Y-%m")
+sales = sales.drop(columns=["date", "time"])
 
-df.to_csv("cleaned_retail.csv", index=False)
-print("saved cleaned_retail.csv")
+print("rows:", len(raw), "->", len(sales))
+sales.to_csv("cleaned_sales.csv", index=False)
 
+branches = sales[["branch", "city"]].drop_duplicates().reset_index(drop=True)
+branches.insert(0, "branch_id", range(1, len(branches) + 1))
 
-# =================================================================
-# WEEK 2 - split into customers / products / orders
-# =================================================================
+customers = sales[["customer_type", "gender"]].drop_duplicates().reset_index(drop=True)
+customers.insert(0, "customer_id", range(1, len(customers) + 1))
 
-# some stock codes have more than one description over time (typos, updates etc)
-# just pick whichever description shows up most for that stock code
-most_common_desc = (
-    df.groupby(["stock_code", "description"]).size()
-    .reset_index(name="count")
-    .sort_values("count", ascending=False)
-    .drop_duplicates(subset="stock_code")
-)
-products = most_common_desc[["stock_code", "description"]].sort_values("stock_code").reset_index(drop=True)
-
-# price for the same product isn't fixed, it changes across the year
-# so keep min/avg/max as reference info on the product itself
-price_stats = df.groupby("stock_code")["unit_price"].agg(
-    min_price="min", avg_price="mean", max_price="max"
-).round(2).reset_index()
-
-products = products.merge(price_stats, on="stock_code", how="left")
+products = sales[["product_line"]].drop_duplicates().reset_index(drop=True)
 products.insert(0, "product_id", range(1, len(products) + 1))
-products = products.rename(columns={"stock_code": "sku"})
 
-print("\nproducts:", len(products))
+orders = sales.merge(branches, on=["branch", "city"])
+orders = orders.merge(customers, on=["customer_type", "gender"])
+orders = orders.merge(products, on="product_line")
+orders["order_date"] = orders["order_date"].dt.strftime("%Y-%m-%d")
+orders = orders[["invoice_id", "branch_id", "customer_id", "product_id", "order_date", "order_time",
+                 "payment", "unit_price", "quantity", "tax", "sales_amount", "cogs", "rating"]]
+orders.insert(0, "order_id", range(1, len(orders) + 1))
 
-# same idea for customers - pick their most common country
-most_common_country = (
-    df.groupby(["customer_id", "country"]).size()
-    .reset_index(name="count")
-    .sort_values("count", ascending=False)
-    .drop_duplicates(subset="customer_id")
-)
-customers = most_common_country[["customer_id", "country"]].sort_values("customer_id").reset_index(drop=True)
-customers["is_guest"] = customers["customer_id"] == -1
-# -1 covers a bunch of different unknown customers from different countries
-# so "most common country" doesn't really mean anything for that row
-customers.loc[customers["is_guest"], "country"] = "Unknown"
+for name, table in [("branches", branches), ("customers", customers),
+                    ("products", products), ("orders", orders)]:
+    table.to_csv(name + ".csv", index=False)
+    print(name, len(table))
 
-# basic customer profile stats, based on completed orders only
-completed = df[~df["is_cancelled"]]
-customer_stats = completed.groupby("customer_id").agg(
-    first_purchase=("invoice_date", "min"),
-    last_purchase=("invoice_date", "max"),
-    num_orders=("invoice_no", "nunique"),
-    total_spent=("line_total", "sum"),
-).reset_index()
-customer_stats["total_spent"] = customer_stats["total_spent"].round(2)
+# Analysis
+by_product = sales.groupby("product_line")["sales_amount"].sum().sort_values(ascending=False)
+by_month = sales.groupby("order_month")["sales_amount"].sum()
+by_city = sales.groupby("city")["sales_amount"].sum().sort_values(ascending=False)
+avg_sale = sales["sales_amount"].mean()
+avg_by_type = sales.groupby("customer_type")["sales_amount"].mean()
+payment_counts = sales["payment"].value_counts()
+rating_by_product = sales.groupby("product_line")["rating"].mean().sort_values()
 
-customers = customers.merge(customer_stats, on="customer_id", how="left")
-customers["num_orders"] = customers["num_orders"].fillna(0).astype(int)
-customers["total_spent"] = customers["total_spent"].fillna(0)
+print(by_product)
+print(by_month)
+print(by_city)
+print(rating_by_product)
 
-print("customers:", len(customers))
+insights = [
+    f"{by_product.index[0]} brings in the most money ({by_product.iloc[0]:,.0f}, {by_product.iloc[0] / by_product.sum() * 100:.0f}% of total). {by_product.index[-1]} is lowest.",
+    f"{by_month.idxmax()} was the best month with {by_month.max():,.0f}, {by_month.idxmin()} the weakest with {by_month.min():,.0f}.",
+    f"{by_city.index[0]} is the top city, {by_city.iloc[0]:,.0f} in sales vs {by_city.iloc[-1]:,.0f} for {by_city.index[-1]}.",
+    f"Average invoice is {avg_sale:,.0f}. Payment is split fairly evenly: {', '.join(f'{k} {v}' for k, v in payment_counts.items())}.",
+    f"Members average {avg_by_type['Member']:,.0f} per invoice vs {avg_by_type['Normal']:,.0f} for normal customers, a gap of {abs(avg_by_type['Member'] - avg_by_type['Normal']) / avg_by_type['Normal'] * 100:.0f}%.",
+    f"Lowest rated product line is {rating_by_product.index[0]} ({rating_by_product.iloc[0]:.2f}), highest is {rating_by_product.index[-1]} ({rating_by_product.iloc[-1]:.2f}).",
+]
 
-# orders table, swapping stock_code for product_id
-sku_to_id = dict(zip(products["sku"], products["product_id"]))
-df["product_id"] = df["stock_code"].map(sku_to_id)
+print("\ninsights")
+for i, line in enumerate(insights, 1):
+    print(f"{i}. {line}")
 
-orders = df[["invoice_no", "invoice_date", "is_cancelled", "customer_id",
-             "product_id", "quantity", "unit_price", "line_total"]].reset_index(drop=True)
-orders.insert(0, "order_line_id", range(1, len(orders) + 1))
+by_product.sort_values().plot(kind="barh", title="Sales by product line")
+plt.xlabel("sales")
+plt.tight_layout()
+plt.savefig("sales_by_product_line.png")
+plt.close()
 
-print("order lines:", len(orders))
+# Load into MySQL
+# Create the database if it doesn't exist, then connect to it
+server_url = URL.create("mysql+pymysql", username=DB_USER, password=DB_PASSWORD,
+                        host=DB_HOST, port=DB_PORT)
+with create_engine(server_url).begin() as conn:
+    conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {DB_NAME} CHARACTER SET utf8mb4"))
 
-# quick sanity check - every order should point to a real customer and product
-assert orders["product_id"].notna().all(), "some order rows have no matching product"
-assert orders["customer_id"].isin(customers["customer_id"]).all(), "some order rows have no matching customer"
-print("foreign key check passed")
+engine = create_engine(URL.create("mysql+pymysql", username=DB_USER, password=DB_PASSWORD,
+                                  host=DB_HOST, port=DB_PORT, database=DB_NAME))
 
-customers.to_csv("customers.csv", index=False)
-products.to_csv("products.csv", index=False)
-orders.to_csv("orders.csv", index=False)
+DDL = """
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS branches;
+SET FOREIGN_KEY_CHECKS = 1;
 
-print("\nsaved customers.csv, products.csv, orders.csv")
-print("\ntop 5 real customers by total spent (excluding the guest bucket):")
-real_customers = customers[~customers["is_guest"]]
-print(real_customers.sort_values("total_spent", ascending=False).head()[["customer_id", "country", "num_orders", "total_spent"]])
+CREATE TABLE branches (
+    branch_id  INT          NOT NULL,
+    branch     VARCHAR(20)  NOT NULL,
+    city       VARCHAR(40)  NOT NULL,
+    CONSTRAINT pk_branches PRIMARY KEY (branch_id),
+    CONSTRAINT uq_branch UNIQUE (branch, city)
+) ENGINE = InnoDB;
+
+CREATE TABLE customers (
+    customer_id    INT         NOT NULL,
+    customer_type  VARCHAR(20) NOT NULL,
+    gender         VARCHAR(10) NOT NULL,
+    CONSTRAINT pk_customers PRIMARY KEY (customer_id),
+    CONSTRAINT chk_customer_type CHECK (customer_type IN ('Member', 'Normal')),
+    CONSTRAINT chk_gender CHECK (gender IN ('Male', 'Female'))
+) ENGINE = InnoDB;
+
+CREATE TABLE products (
+    product_id    INT         NOT NULL,
+    product_line  VARCHAR(40) NOT NULL,
+    CONSTRAINT pk_products PRIMARY KEY (product_id),
+    CONSTRAINT uq_product_line UNIQUE (product_line)
+) ENGINE = InnoDB;
+
+CREATE TABLE orders (
+    order_id      INT           NOT NULL,
+    invoice_id    VARCHAR(20)   NOT NULL,
+    branch_id     INT           NOT NULL,
+    customer_id   INT           NOT NULL,
+    product_id    INT           NOT NULL,
+    order_date    DATE          NOT NULL,
+    order_time    TIME          NOT NULL,
+    payment       VARCHAR(20)   NOT NULL,
+    unit_price    DECIMAL(10,2) NOT NULL,
+    quantity      INT           NOT NULL,
+    tax           DECIMAL(10,4) NOT NULL,
+    sales_amount  DECIMAL(12,4) NOT NULL,
+    cogs          DECIMAL(12,4) NOT NULL,
+    rating        DECIMAL(3,1),
+    CONSTRAINT pk_orders PRIMARY KEY (order_id),
+    CONSTRAINT uq_invoice UNIQUE (invoice_id),
+    CONSTRAINT fk_orders_branch FOREIGN KEY (branch_id) REFERENCES branches (branch_id),
+    CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers (customer_id),
+    CONSTRAINT fk_orders_product FOREIGN KEY (product_id) REFERENCES products (product_id),
+    CONSTRAINT chk_payment CHECK (payment IN ('Cash', 'Credit card', 'Ewallet')),
+    CONSTRAINT chk_unit_price CHECK (unit_price > 0),
+    CONSTRAINT chk_quantity CHECK (quantity > 0),
+    CONSTRAINT chk_sales CHECK (sales_amount > 0),
+    CONSTRAINT chk_rating CHECK (rating BETWEEN 1 AND 10)
+) ENGINE = InnoDB;
+"""
+
+statements = [s.strip() for s in DDL.split(";") if s.strip()]
+with engine.begin() as conn:
+    for stmt in statements:
+        conn.execute(text(stmt))
+print("schema created")
+
+# Load parent tables first, then orders
+load_order = ["branches", "customers", "products", "orders"]
+table_map = {"branches": branches, "customers": customers, "products": products, "orders": orders}
+
+with engine.begin() as conn:
+    for name in load_order:
+        table_map[name].to_sql(name, conn, if_exists="append", index=False,
+                               method="multi", chunksize=500)
+        print("loaded", name, len(table_map[name]))
+
+# Post-load check: row counts must match
+with engine.connect() as conn:
+    check = pd.DataFrame({
+        "table": load_order,
+        "dataframe_rows": [len(table_map[t]) for t in load_order],
+        "mysql_rows": [conn.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar() for t in load_order],
+    })
+    check["match"] = check["dataframe_rows"] == check["mysql_rows"]
+    print(check.to_string(index=False))
+    assert check["match"].all()
+
+# SQL Reporting
+print("\nsales by product line")
+print(pd.read_sql(text("""
+    SELECT p.product_line, COUNT(*) AS num_orders, ROUND(SUM(o.sales_amount), 2) AS revenue
+    FROM orders o
+    JOIN products p ON o.product_id = p.product_id
+    GROUP BY p.product_line
+    ORDER BY revenue DESC"""), engine))
+
+print("\nmonthly revenue")
+print(pd.read_sql(text("""
+    SELECT DATE_FORMAT(order_date, '%Y-%m') AS month, ROUND(SUM(sales_amount), 2) AS revenue
+    FROM orders
+    GROUP BY month
+    ORDER BY month"""), engine))
+
+print("\nrevenue by branch and city")
+print(pd.read_sql(text("""
+    SELECT b.branch, b.city, ROUND(SUM(o.sales_amount), 2) AS revenue
+    FROM orders o
+    JOIN branches b ON o.branch_id = b.branch_id
+    GROUP BY b.branch_id
+    ORDER BY revenue DESC"""), engine))
+
+print("\naverage order value by customer type and gender")
+print(pd.read_sql(text("""
+    SELECT c.customer_type, c.gender, COUNT(*) AS num_orders, ROUND(AVG(o.sales_amount), 2) AS avg_order_value
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.customer_id
+    GROUP BY c.customer_id
+    ORDER BY avg_order_value DESC"""), engine))
+
+print("\npayment methods")
+print(pd.read_sql(text("""
+    SELECT payment, COUNT(*) AS num_orders, ROUND(SUM(sales_amount), 2) AS revenue
+    FROM orders
+    GROUP BY payment
+    ORDER BY num_orders DESC"""), engine))
+
+print("\nproduct lines earning more than the average product line")
+print(pd.read_sql(text("""
+    SELECT p.product_line, ROUND(SUM(o.sales_amount), 2) AS revenue
+    FROM orders o
+    JOIN products p ON o.product_id = p.product_id
+    GROUP BY p.product_line
+    HAVING SUM(o.sales_amount) > (
+        SELECT AVG(total) FROM (
+            SELECT SUM(sales_amount) AS total FROM orders GROUP BY product_id) AS sub)
+    ORDER BY revenue DESC"""), engine))
+
+print("\nbranches with more than 330 orders")
+print(pd.read_sql(text("""
+    SELECT b.branch, b.city, COUNT(*) AS num_orders
+    FROM orders o
+    JOIN branches b ON o.branch_id = b.branch_id
+    GROUP BY b.branch_id
+    HAVING COUNT(*) > 330
+    ORDER BY num_orders DESC"""), engine))
+
+print("\nratings grouped high / medium / low")
+print(pd.read_sql(text("""
+    SELECT CASE WHEN rating >= 9 THEN 'High (9+)'
+                WHEN rating >= 7 THEN 'Medium (7-9)'
+                ELSE 'Low (under 7)' END AS rating_group,
+           COUNT(*) AS num_orders,
+           ROUND(AVG(sales_amount), 2) AS avg_order_value
+    FROM orders
+    GROUP BY rating_group
+    ORDER BY num_orders DESC"""), engine))
+
+print("\nbusiest hours of the day")
+print(pd.read_sql(text("""
+    SELECT HOUR(order_time) AS hour, COUNT(*) AS num_orders
+    FROM orders
+    GROUP BY hour
+    ORDER BY num_orders DESC
+    LIMIT 5"""), engine))
+
+print("\nbig invoices (over 800) per branch")
+print(pd.read_sql(text("""
+    SELECT b.branch, COUNT(*) AS big_invoices
+    FROM orders o
+    JOIN branches b ON o.branch_id = b.branch_id
+    WHERE o.sales_amount > 800
+    GROUP BY b.branch
+    ORDER BY big_invoices DESC"""), engine))
+
+print("\nhigh-value ewallet orders in Yangon")
+print(pd.read_sql(text("""
+    SELECT o.invoice_id, p.product_line, o.sales_amount, o.payment
+    FROM orders o
+    JOIN branches b ON o.branch_id = b.branch_id
+    JOIN products p ON o.product_id = p.product_id
+    WHERE o.payment = 'Ewallet' AND b.city = 'Yangon' AND o.sales_amount > 500
+    ORDER BY o.sales_amount DESC"""), engine))
+
+print("\nbranches with no big invoices")
+print(pd.read_sql(text("""
+    SELECT b.branch, b.city, COUNT(o.order_id) AS big_invoices
+    FROM branches b
+    LEFT JOIN orders o ON o.branch_id = b.branch_id AND o.sales_amount > 800
+    GROUP BY b.branch_id
+    ORDER BY big_invoices DESC"""), engine))
+
+engine.dispose()
