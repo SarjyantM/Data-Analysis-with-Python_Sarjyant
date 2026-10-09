@@ -1,0 +1,5 @@
+customer_id,customer_type,gender
+1,Member,Female
+2,Normal,Female
+3,Member,Male
+4,Normal,Male
