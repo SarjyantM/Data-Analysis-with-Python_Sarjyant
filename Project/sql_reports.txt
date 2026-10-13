@@ -1,0 +1,102 @@
+sales by product line
+          product_line  num_orders  revenue
+    Food and beverages         174 56144.84
+     Sports and travel         166 55122.83
+Electronic accessories         170 54337.53
+   Fashion accessories         178 54305.90
+    Home and lifestyle         160 53861.91
+     Health and beauty         152 49193.74
+
+monthly revenue
+  month   revenue
+2019-01 116291.87
+2019-02  97219.37
+2019-03 109455.51
+
+revenue by branch and city
+branch      city   revenue
+  Giza Naypyitaw 110568.71
+  Alex    Yangon 106200.37
+ Cairo  Mandalay 106197.67
+
+average order value by customer type and gender
+customer_type gender  num_orders  avg_order_value
+       Member Female         356           351.70
+       Normal Female         215           323.10
+       Member   Male         209           308.56
+       Normal   Male         220           290.03
+
+payment methods
+    payment  num_orders   revenue
+    Ewallet         345 109993.11
+       Cash         344 112206.57
+Credit card         311 100767.07
+
+product lines earning more than the average product line
+          product_line  revenue
+    Food and beverages 56144.84
+     Sports and travel 55122.83
+Electronic accessories 54337.53
+   Fashion accessories 54305.90
+    Home and lifestyle 53861.91
+
+branches with more than 330 orders
+branch     city  num_orders
+  Alex   Yangon         340
+ Cairo Mandalay         332
+
+ratings grouped high / medium / low
+ rating_group  num_orders  avg_order_value
+Low (under 7)         499           327.11
+ Medium (7-9)         335           319.10
+    High (9+)         166           318.31
+
+busiest hours of the day
+ hour  num_orders
+   19         113
+   13         103
+   15         102
+   10         101
+   18          93
+
+big invoices (over 800) per branch
+branch  big_invoices
+  Giza            27
+ Cairo            18
+  Alex            13
+
+high-value ewallet orders in Yangon
+ invoice_id           product_line  sales_amount payment
+325-77-6186     Home and lifestyle      951.8250 Ewallet
+704-48-3927 Electronic accessories      931.0350 Ewallet
+139-32-4183      Sports and travel      921.1860 Ewallet
+880-46-5796      Sports and travel      807.6600 Ewallet
+243-55-8457     Food and beverages      781.6200 Ewallet
+884-80-6021 Electronic accessories      771.4350 Ewallet
+635-40-6220      Health and beauty      752.6400 Ewallet
+135-84-8019    Fashion accessories      736.4385 Ewallet
+898-04-2717    Fashion accessories      721.9800 Ewallet
+850-41-9669 Electronic accessories      709.3170 Ewallet
+443-59-0061     Food and beverages      708.2250 Ewallet
+287-21-9091     Home and lifestyle      705.6315 Ewallet
+373-73-7910      Sports and travel      634.3785 Ewallet
+667-92-0055      Health and beauty      628.9290 Ewallet
+575-30-8091      Sports and travel      609.0000 Ewallet
+588-47-8641    Fashion accessories      588.4200 Ewallet
+272-65-1806 Electronic accessories      575.3160 Ewallet
+750-67-8428      Health and beauty      548.9715 Ewallet
+645-44-1170     Home and lifestyle      548.7615 Ewallet
+157-13-5295      Health and beauty      545.3700 Ewallet
+410-67-1709    Fashion accessories      536.5920 Ewallet
+721-86-6247     Home and lifestyle      532.7280 Ewallet
+411-77-0180 Electronic accessories      530.6700 Ewallet
+857-16-3520    Fashion accessories      525.2310 Ewallet
+667-23-5919    Fashion accessories      507.6750 Ewallet
+160-22-2687      Health and beauty      503.7375 Ewallet
+
+big invoice count for every branch, including ones with none
+branch      city  big_invoices
+  Giza Naypyitaw            27
+ Cairo  Mandalay            18
+  Alex    Yangon            13
+
