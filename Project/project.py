@@ -13,7 +13,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # MySQL connection settings
 DB_USER     = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "root") 
 DB_HOST     = os.getenv("DB_HOST", "localhost")
 DB_PORT     = int(os.getenv("DB_PORT", "3306"))
 DB_NAME     = "supermarket_db"
@@ -50,6 +50,33 @@ for col in ["Unit price", "Quantity", "Sales", "Rating"]:
 # Check that categories are what we expect
 for col in ["Branch", "City", "Customer type", "Gender", "Product line", "Payment"]:
     print(f"{col}:", sorted(raw[col].unique()))
+
+# EDA charts
+# histograms to see how sales and rating are spread
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+raw["Sales"].plot(kind="hist", bins=30, ax=axes[0], title="Distribution of Sales")
+axes[0].set_xlabel("sales")
+raw["Rating"].plot(kind="hist", bins=20, ax=axes[1], title="Distribution of Rating")
+axes[1].set_xlabel("rating")
+plt.tight_layout()
+plt.savefig("eda_histograms.png")
+plt.close()
+
+# boxplots to back up the IQR outlier check
+raw[["Unit price", "Sales"]].plot(kind="box", subplots=True, layout=(1, 2), figsize=(8, 4),
+                                  title="Outlier check (boxplots)")
+plt.tight_layout()
+plt.savefig("eda_boxplots.png")
+plt.close()
+
+# invoices per hour, time is still text in the raw data so parse it first
+hours = pd.to_datetime(raw["Time"], format="%I:%M:%S %p").dt.hour
+hours.value_counts().sort_index().plot(kind="bar", title="Invoices per hour of the day")
+plt.xlabel("hour")
+plt.ylabel("invoices")
+plt.tight_layout()
+plt.savefig("eda_orders_per_hour.png")
+plt.close()
 
 # Clean & Transform
 sales = raw.drop_duplicates()
@@ -134,6 +161,11 @@ questions = [
 print("\nquestions and insights")
 for i, (question, answer) in enumerate(questions, 1):
     print(f"{i}. {question}\n   {answer}")
+
+# save the answers to a file as well
+with open("insights.txt", "w", encoding="utf-8") as f:
+    for i, (question, answer) in enumerate(questions, 1):
+        f.write(f"{i}. {question}\n   {answer}\n\n")
 
 by_product.sort_values().plot(kind="barh", title="Sales by product line")
 plt.xlabel("sales")

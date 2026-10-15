@@ -1,0 +1,18 @@
+1. Which product line makes the most money?
+   Food and beverages (56,145, 17% of total). Health and beauty is lowest.
+
+2. Which month sold the most?
+   2019-01 with 116,292, while 2019-02 was the weakest with 97,219.
+
+3. Which city sells the most?
+   Naypyitaw, 110,569 in sales vs 106,198 for Mandalay.
+
+4. What is the average invoice and how do people pay?
+   Average invoice is 323. Payment is split fairly evenly: Ewallet 345, Cash 344, Credit card 311.
+
+5. Do members spend more than normal customers?
+   member groups average 336 per invoice vs 306 for normal groups, a gap of 10%.
+
+6. Which product line is rated lowest?
+   Home and lifestyle (6.84), the highest is Food and beverages (7.11).
+
